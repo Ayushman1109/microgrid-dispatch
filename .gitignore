@@ -1,0 +1,18 @@
+.env
+predictions.csv
+
+# appsail: only track source files, ignore vendored packages
+appsail/*
+!appsail/app.py
+!appsail/app-config.json
+!appsail/app-config.example.json
+!appsail/requirements.txt
+!appsail/core/
+!appsail/data/
+!appsail/static/
+
+**/__pycache__/**
+*.pyc
+*.pyo
+
+

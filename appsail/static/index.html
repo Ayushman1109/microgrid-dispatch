@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Microgrid controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#D7DAD5; --plate:#E6E8E3; --well:#F3F4F0; --ink:#22272A; --ink-2:#596166; --line:#A9AFAD; --line-2:#C4C9C6;
+  --grid:#7D858A; --store:#1F6F8B; --red:#C1121F; --amber:#E09F00; --on-red:#FFFFFF; --on-amber:#22272A; --on-store:#FFFFFF;
+  --hatch:rgba(34,39,42,.10); --bezel:#22272A;
+  --font:"B612","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  color-scheme:light; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#26292B; --plate:#2F3335; --well:#1E2123; --ink:#E3E6E3; --ink-2:#9AA2A5; --line:#4A5155; --line-2:#3A4043;
+  --grid:#8E979C; --store:#4FA3BF; --red:#FF5A4E; --amber:#FFB81C; --on-red:#1E2123; --on-amber:#1E2123; --on-store:#1E2123;
+  --hatch:rgba(227,230,227,.08); --bezel:#121416; color-scheme:dark;}}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--store);outline-offset:2px}
+button{font:inherit;color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 20px 56px}
+h1,h2{margin:0;font-weight:700;line-height:1.2}
+h1{font-size:1.45rem} h2{font-size:1rem}
+.sub{color:var(--ink-2);font-size:.875rem}
+.plate{background:var(--plate);border:1px solid var(--line-2);padding:14px 16px}
+.well{background:var(--well);border:1px solid var(--line-2)}
+
+/* header with drawing title block */
+.head{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:end;margin-bottom:14px}
+.titleblock{display:grid;grid-template-columns:repeat(4,auto);border:1.5px solid var(--ink);font-size:.8rem}
+.titleblock div{padding:4px 10px;border-left:1px solid var(--line)}
+.titleblock div:first-child{border-left:0}
+.titleblock b{display:block;font-size:.9rem}
+.titleblock .warn b{color:var(--amber)}
+@media (max-width:860px){.head{grid-template-columns:1fr}.titleblock{grid-template-columns:repeat(2,1fr)}.titleblock div:nth-child(3){border-left:0}.titleblock div:nth-child(n+3){border-top:1px solid var(--line)}}
+
+/* annunciator */
+.annun{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:4px;background:var(--bezel);margin-bottom:14px}
+.tile{background:var(--plate);color:var(--ink-2);padding:8px 10px;min-height:58px;display:flex;flex-direction:column;justify-content:space-between;opacity:.9}
+.tile strong{font-size:.86rem;line-height:1.25}
+.tile span{font-size:.75rem}
+.tile.lit.red{background:var(--red);color:var(--on-red);opacity:1}
+.tile.lit.amber{background:var(--amber);color:var(--on-amber);opacity:1}
+.tile.lit.store{background:var(--store);color:var(--on-store);opacity:1}
+.tile.lit.ink{background:var(--well);color:var(--ink);opacity:1;box-shadow:inset 0 0 0 2px var(--ink)}
+@media (max-width:860px){.annun{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:480px){.annun{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* diagram + readout */
+.top{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(260px,1fr);gap:14px}
+@media (max-width:900px){.top{grid-template-columns:minmax(0,1fr)}}
+.diagram{padding:6px 10px 0}
+.diagram svg{display:block;width:100%;height:auto}
+.diagram text{font-family:var(--font);fill:var(--ink)}
+.dkey{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--ink-2);padding:6px 6px 10px}
+.dkey i{display:inline-block;width:11px;height:11px;border:1.5px solid var(--ink);vertical-align:-1px;margin-right:5px}
+.readout{display:flex;flex-direction:column;gap:12px}
+.clock{display:flex;align-items:baseline;gap:10px}
+.clock .t{font-size:2.6rem;font-weight:700;line-height:1}
+.state{font-size:1.15rem;font-weight:700;padding:6px 10px;border:2px solid var(--ink)}
+.state.store{background:var(--store);border-color:var(--store);color:var(--on-store)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;margin:0;font-size:.9rem}
+.kv dt{color:var(--ink-2)} .kv dd{margin:0;text-align:right;font-weight:700}
+.kv dd.alarm{color:var(--red)}
+.why{margin:0;padding-left:16px;color:var(--ink-2);font-size:.82rem}
+.transport{display:flex;gap:6px;margin-top:auto}
+.btn{border:1.5px solid var(--ink);background:var(--well);padding:7px 12px;cursor:pointer;font-weight:700;font-size:.875rem}
+.btn:hover{background:var(--plate)}
+.btn.primary{background:var(--ink);color:var(--well)}
+.btn[aria-pressed="true"]{background:var(--store);border-color:var(--store);color:var(--on-store)}
+.btn:disabled{opacity:.5;cursor:progress}
+
+/* trend */
+.trend{margin-top:14px}
+.trend-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;align-items:baseline;margin-bottom:8px}
+.trend svg{display:block;width:100%;height:auto;cursor:crosshair;touch-action:pan-y}
+.trend svg text{font-family:var(--font);fill:var(--ink-2);font-size:11px}
+.trend-key{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.78rem;color:var(--ink-2)}
+.trend-key i{display:inline-block;width:18px;height:0;border-top:2.5px solid var(--ink);vertical-align:3px;margin-right:5px}
+
+/* lower */
+.lower{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px}
+@media (max-width:900px){.lower{grid-template-columns:minmax(0,1fr)}}
+.field{display:flex;flex-direction:column;gap:3px;font-size:.82rem;color:var(--ink-2)}
+.fields{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-top:10px}
+select,input{font:inherit;font-size:.875rem;color:var(--ink);background:var(--well);border:1px solid var(--line);padding:6px 8px;border-radius:0}
+.fileline{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2)}
+.drop.over{outline:2px dashed var(--store);outline-offset:4px}
+details{margin-top:12px;border-top:1px solid var(--line-2);padding-top:10px}
+summary{cursor:pointer;font-weight:700;font-size:.875rem}
+.grid-in{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px}
+.scroll{overflow:auto;max-height:340px;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+th,td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--line-2);white-space:nowrap}
+th{position:sticky;top:0;background:var(--plate);z-index:1;font-weight:700}
+th:first-child,td:first-child{text-align:left}
+td input{width:78px;text-align:right;padding:3px 5px}
+tr.sel td{background:var(--well);box-shadow:inset 0 -2px 0 var(--ink)}
+tbody tr{cursor:pointer}
+.m{display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:0}
+.m.grid{background:var(--grid)} .m.store{background:var(--store)}
+.a{color:var(--red);font-weight:700}
+ol.soe{list-style:none;margin:10px 0 0;padding:0;font-size:.84rem;max-height:340px;overflow:auto}
+ol.soe li{display:grid;grid-template-columns:52px 12px 1fr;gap:8px;padding:6px 4px;border-bottom:1px solid var(--line-2);cursor:pointer}
+ol.soe li:hover{background:var(--well)}
+ol.soe .p{width:10px;height:10px;margin-top:5px;background:var(--grid)}
+ol.soe .p.red{background:var(--red)} ol.soe .p.amber{background:var(--amber)} ol.soe .p.store{background:var(--store)}
+ol.soe .tm{font-weight:700}
+.msg{margin-top:10px;font-size:.84rem;padding:8px 10px;border:1.5px solid var(--red);color:var(--ink);display:none}
+.msg.show{display:block}
+.foot{margin-top:14px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.foot{grid-template-columns:minmax(0,1fr)}}
+ul.plain{list-style:none;margin:8px 0 0;padding:0;font-size:.82rem;max-height:220px;overflow:auto}
+ul.plain li{padding:5px 0;border-bottom:1px solid var(--line-2)}
+ul.plain .lv{font-weight:700;margin-right:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="head">
+  <div>
+    <h1>Microgrid controller</h1>
+    <p class="sub">Day-ahead demand forecast and power-source schedule</p>
+  </div>
+  <div class="titleblock" aria-label="Forecast details">
+    <div><span class="sub">Forecast window</span><b id="tbWindow">—</b></div>
+    <div id="tbSourceCell"><span class="sub">Model</span><b id="tbSource">Connecting</b></div>
+    <div><span class="sub">Peak demand</span><b id="tbPeak">—</b></div>
+    <div><span class="sub">Run</span><b id="tbRun">—</b></div>
+  </div>
+</header>
+
+<section class="annun" aria-label="Alarm annunciator for the selected hour" aria-live="polite">
+  <div class="tile" id="anOver"><strong>Critical overload</strong><span>—</span></div>
+  <div class="tile" id="anRes"><strong>Battery at reserve</strong><span>—</span></div>
+  <div class="tile" id="anStore"><strong>On storage</strong><span>—</span></div>
+  <div class="tile" id="anPeak"><strong>Evening peak window</strong><span>18:00 to 22:00</span></div>
+  <div class="tile" id="anSrc"><strong>Forecast model offline</strong><span>—</span></div>
+  <div class="tile" id="anData"><strong>Input repaired</strong><span>—</span></div>
+</section>
+
+<div class="msg" id="msg" role="alert"></div>
+
+<div class="top">
+  <section class="plate diagram" aria-labelledby="dTitle">
+    <h2 id="dTitle" style="padding:6px 6px 8px">Single-line diagram</h2>
+    <svg id="sld" viewBox="0 0 760 350" role="img" aria-label="Single-line diagram for the selected hour"></svg>
+    <div class="dkey">
+      <span><i style="background:var(--ink)"></i>Breaker closed</span>
+      <span><i></i>Breaker open</span>
+      <span><i style="border:0;border-top:3px solid var(--grid);height:0;width:16px;vertical-align:3px"></i>Grid power</span>
+      <span><i style="border:0;border-top:3px solid var(--store);height:0;width:16px;vertical-align:3px"></i>Battery power</span>
+      <span>Arrows show direction of flow</span>
+    </div>
+  </section>
+
+  <section class="plate readout" aria-labelledby="hourTitle">
+    <h2 id="hourTitle" class="sr">Selected hour</h2>
+    <div class="clock"><span class="t" id="rTime">--:--</span><span class="sub" id="rDate"></span></div>
+    <div class="state" id="rState">—</div>
+    <dl class="kv">
+      <dt>Forecast demand</dt><dd id="rDemand">—</dd>
+      <dt>Dispatch signal</dt><dd id="rSignal">—</dd>
+      <dt>Overload alarm</dt><dd id="rAlarm">—</dd>
+      <dt>Battery charge</dt><dd id="rSoc">—</dd>
+      <dt>Battery flow</dt><dd id="rFlow">—</dd>
+      <dt>Grid import</dt><dd id="rGrid">—</dd>
+      <dt>Solar output</dt><dd id="rSolar">—</dd>
+    </dl>
+    <ul class="why" id="rWhy"></ul>
+    <div class="transport">
+      <button class="btn" id="prev" aria-label="Previous hour">Previous</button>
+      <button class="btn" id="play" aria-pressed="false">Play 24 hours</button>
+      <button class="btn" id="next" aria-label="Next hour">Next</button>
+    </div>
+  </section>
+</div>
+
+<section class="plate trend" aria-labelledby="tTitle">
+  <div class="trend-head">
+    <h2 id="tTitle">24-hour trend</h2>
+    <div class="trend-key">
+      <span><i></i>Forecast demand (kW)</span>
+      <span><i style="border-top-style:dashed;border-color:var(--red)"></i>Overload limit 200 kW</span>
+      <span><i style="border-top-style:dashed;border-color:var(--store)"></i>Storage threshold 160 kW</span>
+      <span><i style="border-top:2px dotted var(--ink-2)"></i>Battery charge (%)</span>
+    </div>
+  </div>
+  <svg id="trend" role="img" aria-label="Demand, power source and battery charge for each hour. Click or use arrow keys to select an hour." tabindex="0"></svg>
+</section>
+
+<div class="lower">
+  <section class="plate" aria-labelledby="inTitle">
+    <h2 id="inTitle">Telemetry input</h2>
+    <p class="sub">Forecast a day from the test set, upload your own readings, or edit the hours below.</p>
+    <div class="fields">
+      <label class="field">Test-set day<select id="day"></select></label>
+      <label class="field">Shift temperatures (°C)<input type="number" id="shift" value="0" step="0.5" style="width:90px"></label>
+      <button class="btn primary" id="run">Run forecast</button>
+    </div>
+    <div class="fileline drop" id="drop">
+      <button class="btn" id="pick">Upload CSV</button>
+      <span class="sub">or drop a file here. Needs timestamp, ambient_temp_c, humidity_pct, solar_irradiance_wm2.</span>
+      <input type="file" id="file" accept=".csv,text/csv" hidden>
+    </div>
+    <details>
+      <summary>Edit the 24 input hours</summary>
+      <p class="sub">Blank cells are filled from neighbouring hours. Press Run forecast after editing.</p>
+      <div class="scroll"><table id="form"><thead><tr><th>Timestamp</th><th>Temp °C</th><th>Humidity %</th><th>Solar W/m²</th></tr></thead><tbody></tbody></table></div>
+    </details>
+    <details>
+      <summary>Battery and solar settings</summary>
+      <div class="grid-in" id="batt">
+        <label class="field">Capacity (kWh)<input type="number" data-k="capacity_kwh" value="1000" step="50"></label>
+        <label class="field">Starting charge (%)<input type="number" data-k="start_soc_pct" value="85"></label>
+        <label class="field">Reserve floor (%)<input type="number" data-k="min_soc_pct" value="15"></label>
+        <label class="field">Max discharge (kW)<input type="number" data-k="max_discharge_kw" value="250" step="10"></label>
+        <label class="field">Grid charging (kW)<input type="number" data-k="grid_charge_kw" value="80" step="10"></label>
+        <label class="field">Solar panel area (m²)<input type="number" data-k="pv_area_m2" value="400" step="20"></label>
+      </div>
+    </details>
+  </section>
+
+  <section class="plate" aria-labelledby="soeTitle">
+    <h2 id="soeTitle">Sequence of events</h2>
+    <p class="sub">Every source transfer and alarm in the forecast window. Select one to jump to that hour.</p>
+    <ol class="soe" id="soe"></ol>
+  </section>
+</div>
+
+<section class="plate" style="margin-top:14px" aria-labelledby="schTitle">
+  <div class="trend-head">
+    <h2 id="schTitle">Hourly schedule</h2>
+    <button class="btn" id="csv">Download CSV</button>
+  </div>
+  <div class="scroll" style="max-height:420px"><table id="sched"><thead><tr>
+    <th>Hour</th><th>Temp °C</th><th>Demand kW</th><th>Source</th><th>Signal</th><th>Alarm</th><th>Battery %</th><th>Battery kW</th><th>Grid kW</th><th>Solar kW</th>
+  </tr></thead><tbody></tbody></table></div>
+</section>
+
+<div class="foot">
+  <section class="plate" aria-labelledby="qTitle"><h2 id="qTitle">Input checks</h2><ul class="plain" id="quality"></ul></section>
+  <section class="plate" aria-labelledby="lTitle"><h2 id="lTitle">System log</h2><ul class="plain" id="log"></ul></section>
+</div>
+</div>
+
+<style>.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}</style>
+<script>
+const $ = s => document.querySelector(s);
+const S = { H: [], sel: 0, res: null, timer: null, base: [] };
+const f = (n, d = 1) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const hhmm = ts => ts.slice(11, 16);
+const isStore = h => h.grid_mode === "RENEWABLE_STORAGE";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SIG = { ENGAGE_GRID: "Start on main grid", ENGAGE_STORAGE: "Start on storage", SWITCH_TO_STORAGE: "Transfer to storage",
+              SWITCH_TO_GRID: "Transfer to main grid", HOLD: "Hold" };
+
+async function api(path, opts) {
+  const r = await fetch(path, opts); const b = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(b.error || `Server returned ${r.status}`); return b;
+}
+function say(msg) { const m = $("#msg"); m.textContent = msg || ""; m.classList.toggle("show", !!msg); }
+
+/* ---------------- inputs ---------------- */
+const battParams = () => Object.fromEntries([...document.querySelectorAll("#batt input")].filter(i => i.value !== "").map(i => [i.dataset.k, i.value]));
+function fillForm(rows) {
+  $("#form tbody").innerHTML = rows.map(r => `<tr><td><input style="width:150px;text-align:left" value="${esc(r.timestamp)}" aria-label="Timestamp"></td>` +
+    ["ambient_temp_c", "humidity_pct", "solar_irradiance_wm2"].map(k => `<td><input type="number" step="any" value="${r[k] ?? ""}" aria-label="${k}"></td>`).join("") + `</tr>`).join("");
+}
+const readForm = () => [...document.querySelectorAll("#form tbody tr")].map(tr => {
+  const v = [...tr.querySelectorAll("input")].map(i => i.value.trim());
+  return { timestamp: v[0], ambient_temp_c: v[1], humidity_pct: v[2], solar_irradiance_wm2: v[3] };
+});
+function shifted(rows) {
+  const d = parseFloat($("#shift").value) || 0;
+  return rows.map(r => ({ ...r, ambient_temp_c: r.ambient_temp_c === "" ? "" : String(Math.round((parseFloat(r.ambient_temp_c) + d) * 100) / 100) }));
+}
+async function forecast(opts) {
+  document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+  try { const res = await api("/api/forecast", opts); say(""); render(res); }
+  catch (e) { say(`Forecast not updated: ${e.message}. Check the input values, then run again.`); }
+  finally { document.querySelectorAll(".btn").forEach(b => b.disabled = false); loadLog(); }
+}
+function runRows(rows, kind) {
+  const d = parseFloat($("#shift").value) || 0;
+  return forecast({ method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rows: shifted(rows), battery: battParams(), input_kind: kind + (d ? `, temperatures ${d > 0 ? "+" : ""}${d} °C` : "") }) });
+}
+$("#run").onclick = async () => {
+  const formRows = readForm();
+  const fromDay = $("#day").value && $("#day").dataset.loaded !== $("#day").value;
+  if (fromDay) {
+    try { const s = await api("/api/sample?date=" + $("#day").value); fillForm(s.rows); $("#day").dataset.loaded = s.date; return runRows(s.rows, `test day ${s.date}`); }
+    catch (e) { return say(e.message); }
+  }
+  runRows(formRows, $("#day").dataset.loaded ? `test day ${$("#day").dataset.loaded}` : "edited hours");
+};
+$("#pick").onclick = () => $("#file").click();
+function upload(file) {
+  if (!file) return;
+  const fd = new FormData(); fd.append("file", file);
+  Object.entries(battParams()).forEach(([k, v]) => fd.append("battery_" + k, v));
+  $("#day").dataset.loaded = "";
+  forecast({ method: "POST", body: fd });
+}
+$("#file").onchange = e => upload(e.target.files[0]);
+const drop = $("#drop");
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => upload(e.dataTransfer.files[0]));
+
+/* ---------------- render ---------------- */
+function spans(hours) {
+  const out = []; let a = null, b = null;
+  hours.forEach(h => { if (a === null) a = b = h; else if (h === b + 1) b = h; else { out.push([a, b]); a = b = h; } });
+  if (a !== null) out.push([a, b]);
+  return out.map(([x, y]) => x === y ? `${String(x).padStart(2, "0")}:00` : `${String(x).padStart(2, "0")}–${String(y).padStart(2, "0")}:00`).join(", ");
+}
+function render(res) {
+  S.res = res; S.H = res.hourly; S.sel = 0; stop();
+  const H = S.H, sm = res.summary, live = sm.source.startsWith("quickml");
+  $("#tbWindow").textContent = `${H[0].timestamp.slice(0, 16)}, ${H.length} h`;
+  $("#tbSource").textContent = live ? "QuickML" : "Offline copy";
+  $("#tbSourceCell").classList.toggle("warn", !live);
+  const pk = H.reduce((a, b) => b.predicted_demand_kw > a.predicted_demand_kw ? b : a);
+  $("#tbPeak").textContent = `${f(pk.predicted_demand_kw)} kW at ${hhmm(pk.timestamp)}`;
+  $("#tbRun").textContent = sm.run_id;
+
+  // schedule
+  $("#sched tbody").innerHTML = H.map((h, i) => `<tr data-i="${i}">
+    <td>${esc(h.timestamp.slice(0, 16))}</td><td>${f(h.ambient_temp_c)}</td><td><b>${f(h.predicted_demand_kw, 2)}</b></td>
+    <td><span class="m ${isStore(h) ? "store" : "grid"}"></span>${isStore(h) ? "Storage" : "Main grid"}</td>
+    <td>${SIG[h.dispatch_signal]}</td><td>${h.overload_alert ? '<span class="a">Overload</span>' : ""}</td>
+    <td>${f(h.soc_pct)}</td><td>${h.battery_discharge_kw > 0 ? "−" + f(h.battery_discharge_kw) : h.battery_charge_kw > 0 ? "+" + f(h.battery_charge_kw) : "0.0"}</td>
+    <td>${f(h.grid_import_kw)}</td><td>${f(h.solar_kw)}</td></tr>`).join("");
+  document.querySelectorAll("#sched tbody tr").forEach(tr => tr.onclick = () => select(+tr.dataset.i));
+
+  // sequence of events
+  const ev = [];
+  H.forEach((h, i) => {
+    const p = H[i - 1];
+    if (!p) ev.push([i, isStore(h) ? "store" : "", `${isStore(h) ? "Start on storage" : "Start on main grid"}, ${f(h.predicted_demand_kw)} kW`]);
+    else if (h.dispatch_signal === "SWITCH_TO_STORAGE") ev.push([i, "store", `Transfer to storage: ${h.reasons.join("; ")}`]);
+    else if (h.dispatch_signal === "SWITCH_TO_GRID") ev.push([i, "", `Transfer to main grid, demand ${f(h.predicted_demand_kw)} kW`]);
+    if (h.overload_alert && !(p && p.overload_alert)) ev.push([i, "red", `Overload alarm raised, ${f(h.predicted_demand_kw)} kW`]);
+    if (!h.overload_alert && p && p.overload_alert) ev.push([i, "", `Overload alarm cleared, ${f(h.predicted_demand_kw)} kW`]);
+    if (h.reserve_alert && !(p && p.reserve_alert)) ev.push([i, "amber", `Battery at reserve floor, grid backs up ${f(h.grid_backup_kw)} kW`]);
+  });
+  $("#soe").innerHTML = ev.map(([i, c, t]) => `<li data-i="${i}" tabindex="0"><span class="tm">${hhmm(H[i].timestamp)}</span><span class="p ${c}"></span><span>${esc(t)}</span></li>`).join("");
+  document.querySelectorAll("#soe li").forEach(li => { li.onclick = () => select(+li.dataset.i); li.onkeydown = e => { if (e.key === "Enter") select(+li.dataset.i); }; });
+
+  // input checks
+  const c = res.cleaning;
+  $("#quality").innerHTML = `<li>${c.input_rows} row(s) received, ${c.output_rows} used.</li>` +
+    (c.issues.length ? c.issues.map(x => `<li><span class="lv" style="color:var(--amber)">Repaired</span>${esc(x)}</li>`).join("") : `<li>No missing or invalid values.</li>`) +
+    (res.warnings || []).map(w => `<li><span class="lv" style="color:var(--amber)">Note</span>${esc(w)}</li>`).join("");
+
+  select(0);
+}
+
+function tile(id, lit, cls, sub) { const t = $(id); t.className = "tile" + (lit ? ` lit ${cls}` : ""); if (sub !== undefined) t.querySelector("span").textContent = sub; }
+
+function select(i) {
+  const H = S.H; if (!H.length) return;
+  S.sel = Math.max(0, Math.min(H.length - 1, i)); const h = H[S.sel];
+  const nOver = H.filter(x => x.overload_alert).length, nRes = H.filter(x => x.reserve_alert).length, nSt = H.filter(isStore).length;
+  const live = S.res.summary.source.startsWith("quickml");
+  tile("#anOver", h.overload_alert, "red", nOver ? `${nOver} h in window: ${spans(H.filter(x => x.overload_alert).map(x => x.hour))}` : "None in window");
+  tile("#anRes", h.reserve_alert, "amber", nRes ? `${nRes} h in window` : "None in window");
+  tile("#anStore", isStore(h), "store", `${nSt} of ${H.length} h`);
+  tile("#anPeak", h.hour >= 18 && h.hour <= 22, "ink");
+  tile("#anSrc", !live, "amber", live ? "QuickML responding" : "Using offline copy");
+  tile("#anData", S.res.cleaning.issues.length > 0, "amber", S.res.cleaning.issues.length ? `${S.res.cleaning.issues.length} repair(s)` : "Input clean");
+
+  $("#rTime").textContent = hhmm(h.timestamp); $("#rDate").textContent = h.timestamp.slice(0, 10);
+  const st = $("#rState"); st.textContent = isStore(h) ? "Running on renewable storage" : "Running on main grid"; st.className = "state" + (isStore(h) ? " store" : "");
+  $("#rDemand").textContent = f(h.predicted_demand_kw, 2) + " kW";
+  $("#rSignal").textContent = SIG[h.dispatch_signal];
+  const al = $("#rAlarm"); al.textContent = h.overload_alert ? "Critical overload" : "None"; al.className = h.overload_alert ? "alarm" : "";
+  $("#rSoc").textContent = f(h.soc_pct) + " %";
+  $("#rFlow").textContent = h.battery_discharge_kw > 0 ? `Discharging ${f(h.battery_discharge_kw)} kW` : h.battery_charge_kw > 0 ? `Charging ${f(h.battery_charge_kw)} kW` : "Idle";
+  $("#rGrid").textContent = f(h.grid_import_kw) + " kW";
+  $("#rSolar").textContent = f(h.solar_kw) + " kW";
+  $("#rWhy").innerHTML = h.reasons.map(r => `<li>${esc(r)}</li>`).join("");
+  document.querySelectorAll("#sched tbody tr").forEach(tr => tr.classList.toggle("sel", +tr.dataset.i === S.sel));
+  drawSLD(h); drawTrend();
+}
+
+/* ---------------- single-line diagram ---------------- */
+function drawSLD(h) {
+  const C = { ink: css("--ink"), ink2: css("--ink-2"), line: css("--line"), well: css("--well"), grid: css("--grid"), store: css("--store"), red: css("--red"), amber: css("--amber") };
+  const narrow = $("#sld").parentElement.clientWidth < 560;
+  // geometry: three source feeders above the bus, the load below
+  const L = narrow ? { W: 430, gx: 78, bx: 215, sx: 352, k: 1.3 } : { W: 760, gx: 150, bx: 380, sx: 610, k: 1 };
+  const fs = n => (n * L.k).toFixed(1), BUS = 182, TOP = 36, gap = narrow ? 19 : 14;
+  $("#sld").setAttribute("viewBox", `0 0 ${L.W} ${narrow ? 372 : 350}`);
+  const gridOn = h.grid_import_kw > 0.05, battOut = h.battery_discharge_kw > 0.05, battIn = h.battery_charge_kw > 0.05, solarOn = h.solar_kw > 0.05;
+  const battOn = battOut || battIn, over = h.overload_alert;
+  let g = `<defs><pattern id="pvp" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0H8M0 0V8" stroke="${C.ink}" stroke-width=".8"/></pattern></defs>`;
+  const name = (x, t) => `<text x="${x}" y="${fs(14)}" text-anchor="middle" font-size="${fs(12)}" font-weight="700">${t}</text>`;
+  const feeder = (x, y1, y2, on, color) => `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${on ? color : C.line}" stroke-width="${on ? 4 : 2}" ${on ? "" : 'stroke-dasharray="5 5"'}/>`;
+  const breaker = (x, y, closed, tag) => `<rect x="${x - 10}" y="${y - 10}" width="20" height="20" fill="${closed ? C.ink : C.well}" stroke="${C.ink}" stroke-width="2"/>
+      <text x="${x + 15}" y="${y + 4}" font-size="${fs(10)}" fill="${C.ink2}">${tag}</text>`;
+  const arrow = (x, y, down, color) => `<path d="M${x - 7} ${down ? y - 4 : y + 4} L${x} ${down ? y + 4 : y - 4} L${x + 7} ${down ? y - 4 : y + 4}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+  const flow = (x, kw, on, note) => `<text x="${x - gap}" y="${TOP + 76}" text-anchor="end" font-size="${fs(13)}" font-weight="700" fill="${on ? C.ink : C.ink2}">${f(kw)} kW</text>` +
+      (note ? `<text x="${x - gap}" y="${TOP + 72 + 15 * L.k}" text-anchor="end" font-size="${fs(10)}" fill="${C.ink2}">${note}</text>` : "");
+
+  g += `<line x1="${narrow ? 20 : 70}" y1="${BUS}" x2="${L.W - (narrow ? 20 : 70)}" y2="${BUS}" stroke="${C.ink}" stroke-width="7"/>
+        <text x="${L.W - (narrow ? 20 : 70)}" y="${BUS + 18}" text-anchor="end" font-size="${fs(10)}" fill="${C.ink2}">Main bus</text>`;
+
+  // utility grid
+  g += name(L.gx, "Utility grid") + feeder(L.gx, TOP + 46, BUS, gridOn, C.grid) + breaker(L.gx, TOP + 98, gridOn, "CB-1");
+  g += `<circle cx="${L.gx}" cy="${TOP + 22}" r="22" fill="${C.well}" stroke="${C.ink}" stroke-width="2"/>
+        <path d="M${L.gx - 13} ${TOP + 22} q6.5 -10 13 0 t13 0" fill="none" stroke="${C.ink}" stroke-width="2"/>`;
+  if (gridOn) g += arrow(L.gx, BUS - 26, true, C.grid);
+  g += flow(L.gx, h.grid_import_kw, gridOn, h.reserve_alert ? "backing up battery" : "");
+
+  // battery: fill shows state of charge
+  const bw = 56, bh = 40, bx = L.bx - bw / 2, by = TOP + 4, fh = Math.max(0, Math.min(1, h.soc_pct / 100)) * (bh - 6);
+  g += name(L.bx, `Battery ${f(h.soc_pct, 0)}%`) + feeder(L.bx, by + bh, BUS, battOn, C.store) + breaker(L.bx, TOP + 98, battOn, "CB-2");
+  g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${C.well}" stroke="${C.ink}" stroke-width="2"/>
+        <rect x="${bx + 3}" y="${by + bh - 3 - fh}" width="${bw - 6}" height="${fh}" fill="${h.reserve_alert ? C.amber : C.store}"/>
+        <rect x="${L.bx - 7}" y="${by - 5}" width="14" height="5" fill="${C.ink}"/>`;
+  if (battOut) g += arrow(L.bx, BUS - 26, true, C.store); else if (battIn) g += arrow(L.bx, BUS - 26, false, C.store);
+  g += flow(L.bx, battOut ? h.battery_discharge_kw : h.battery_charge_kw, battOn, battOut ? "discharging" : battIn ? "charging" : "idle");
+
+  // solar
+  g += name(L.sx, "Solar array") + feeder(L.sx, TOP + 44, BUS, solarOn, C.ink) + breaker(L.sx, TOP + 98, solarOn, "CB-3");
+  g += `<rect x="${L.sx - 28}" y="${TOP + 6}" width="56" height="38" fill="url(#pvp)" stroke="${C.ink}" stroke-width="2"/>`;
+  if (solarOn) g += arrow(L.sx, BUS - 26, true, C.ink);
+  g += flow(L.sx, h.solar_kw, solarOn, "");
+
+  // site load
+  const lc = over ? C.red : C.ink, lx = L.bx;
+  g += `<line x1="${lx}" y1="${BUS}" x2="${lx}" y2="${BUS + 112}" stroke="${lc}" stroke-width="4"/>` + breaker(lx, BUS + 46, true, "CB-4");
+  g += `<path d="M${lx - 18} ${BUS + 110} L${lx + 18} ${BUS + 110} L${lx} ${BUS + 136} Z" fill="${lc}"/>` + arrow(lx, BUS + 82, true, lc);
+  g += `<text x="${lx + 28}" y="${BUS + 106}" font-size="${fs(12)}" font-weight="700">Site load</text>
+        <text x="${lx + 28}" y="${BUS + 106 + 19 * L.k}" font-size="${fs(15)}" font-weight="700" fill="${lc}">${f(h.predicted_demand_kw)} kW</text>`;
+  if (over) g += `<text x="${lx + 28}" y="${BUS + 106 + 36 * L.k}" font-size="${fs(11)}" font-weight="700" fill="${C.red}">Critical overload</text>`;
+  $("#sld").innerHTML = g;
+}
+
+/* ---------------- trend ---------------- */
+function drawTrend() {
+  const H = S.H, svg = $("#trend"); if (!H.length) return;
+  const W = Math.max(320, svg.parentElement.clientWidth - 32), narrow = W < 600;
+  const m = { l: 40, r: narrow ? 34 : 44, t: 10 }, iw = W - m.l - m.r;
+  const dh = narrow ? 170 : 210, bandY = m.t + dh + 10, bandH = 16, socY = bandY + bandH + 12, socH = 46, Ht = socY + socH + 24;
+  svg.setAttribute("viewBox", `0 0 ${W} ${Ht}`);
+  const n = H.length, cw = iw / n, x = i => m.l + i * cw;
+  const ymax = Math.ceil(Math.max(240, ...H.map(h => h.predicted_demand_kw)) / 40) * 40;
+  const y = v => m.t + dh - v / ymax * dh, ys = p => socY + socH - p / 100 * socH;
+  const C = { ink: css("--ink"), ink2: css("--ink-2"), line2: css("--line-2"), grid: css("--grid"), store: css("--store"), red: css("--red"), hatch: css("--hatch"), well: css("--well") };
+  let g = `<defs><pattern id="hp" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="7" fill="${C.hatch}"/></pattern></defs>`;
+  g += `<rect x="${m.l}" y="${m.t}" width="${iw}" height="${dh}" fill="${C.well}"/>`;
+  H.forEach((h, i) => { if (h.hour >= 18 && h.hour <= 22) g += `<rect x="${x(i)}" y="${m.t}" width="${cw}" height="${dh}" fill="url(#hp)"/>`; });
+  for (let v = 0; v <= ymax; v += 40) g += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="${C.line2}"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  [[200, C.red], [160, C.store]].forEach(([v, c]) => g += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${m.l + iw + 4}" y="${y(v) + 4}" fill="${c}">${v}</text>`);
+  // overload ticks along top
+  H.forEach((h, i) => { if (h.overload_alert) g += `<rect x="${x(i) + 1}" y="${m.t}" width="${cw - 2}" height="4" fill="${C.red}"/>`; });
+  // step line
+  let d = ""; H.forEach((h, i) => { d += `${i ? "L" : "M"}${x(i)} ${y(h.predicted_demand_kw)} L${x(i + 1)} ${y(h.predicted_demand_kw)} `; });
+  g += `<path d="${d}" fill="none" stroke="${C.ink}" stroke-width="2.5"/>`;
+  // mode band
+  H.forEach((h, i) => g += `<rect x="${x(i) + .5}" y="${bandY}" width="${cw - 1}" height="${bandH}" fill="${isStore(h) ? C.store : C.grid}"/>`);
+  g += `<text x="${m.l - 6}" y="${bandY + 12}" text-anchor="end">Src</text>`;
+  // soc
+  g += `<rect x="${m.l}" y="${socY}" width="${iw}" height="${socH}" fill="${C.well}"/>`;
+  g += `<polyline fill="none" stroke="${C.ink2}" stroke-width="2" stroke-dasharray="1 3" stroke-linecap="round" points="${H.map((h, i) => `${x(i) + cw / 2},${ys(h.soc_pct)}`).join(" ")}"/>`;
+  g += `<text x="${m.l - 6}" y="${socY + 10}" text-anchor="end">100%</text><text x="${m.l - 6}" y="${socY + socH}" text-anchor="end">0</text>`;
+  // x labels
+  const step = narrow ? 6 : 3;
+  H.forEach((h, i) => { if (i % step === 0) g += `<text x="${x(i) + cw / 2}" y="${Ht - 6}" text-anchor="middle">${hhmm(h.timestamp)}</text>`; });
+  // cursor
+  const cx = x(S.sel);
+  g += `<rect x="${cx}" y="${m.t}" width="${cw}" height="${socY + socH - m.t}" fill="none" stroke="${C.ink}" stroke-width="2"/>`;
+  g += `<text x="${cx + cw / 2}" y="${Math.max(m.t + 14, y(H[S.sel].predicted_demand_kw) - 8)}" text-anchor="middle" font-weight="700" fill="${C.ink}" paint-order="stroke" stroke="${C.well}" stroke-width="3">${f(H[S.sel].predicted_demand_kw)}</text>`;
+  svg.innerHTML = g;
+  svg.onpointerdown = svg.onpointermove = e => {
+    if (e.type === "pointermove" && !(e.buttons & 1)) return;
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    const i = Math.floor((px - m.l) / cw); if (i >= 0 && i < n && i !== S.sel) { stop(); select(i); }
+  };
+}
+
+/* ---------------- playback + keys ---------------- */
+function stop() { clearInterval(S.timer); S.timer = null; const p = $("#play"); p.setAttribute("aria-pressed", "false"); p.textContent = "Play 24 hours"; }
+$("#play").onclick = () => {
+  if (S.timer) return stop();
+  if (S.sel >= S.H.length - 1) select(0);
+  $("#play").setAttribute("aria-pressed", "true"); $("#play").textContent = "Pause";
+  S.timer = setInterval(() => { if (S.sel >= S.H.length - 1) return stop(); select(S.sel + 1); }, 700);
+};
+$("#prev").onclick = () => { stop(); select(S.sel - 1); };
+$("#next").onclick = () => { stop(); select(S.sel + 1); };
+$("#trend").addEventListener("keydown", e => {
+  if (e.key === "ArrowRight") { e.preventDefault(); stop(); select(S.sel + 1); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); stop(); select(S.sel - 1); }
+  if (e.key === "Home") { e.preventDefault(); stop(); select(0); }
+  if (e.key === "End") { e.preventDefault(); stop(); select(S.H.length - 1); }
+});
+
+/* ---------------- export ---------------- */
+$("#csv").onclick = () => {
+  if (!S.H.length) return;
+  const cols = ["timestamp", "predicted_demand_kw", "grid_mode", "overload_alert", "dispatch_signal", "soc_pct", "battery_discharge_kw", "battery_charge_kw", "grid_import_kw", "solar_kw"];
+  const csv = [cols.join(",")].concat(S.H.map(h => cols.map(c => h[c]).join(","))).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `forecast_${S.H[0].timestamp.slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+};
+
+/* ---------------- log ---------------- */
+async function loadLog() {
+  try { const l = await api("/api/logs");
+    $("#log").innerHTML = l.events.length ? l.events.slice(0, 40).map(e => `<li><span class="lv" style="color:${e.level === "info" ? "var(--ink-2)" : e.level === "warn" ? "var(--amber)" : "var(--red)"}">${esc(e.at.slice(11, 19))}</span>${esc(e.message)}</li>`).join("") : "<li>No events yet.</li>";
+  } catch { }
+}
+
+window.addEventListener("resize", () => S.H.length && select(S.sel));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => S.H.length && select(S.sel));
+
+(async () => {
+  try {
+    const s = await api("/api/sample");
+    $("#day").innerHTML = s.available_dates.map(d => `<option ${d === s.date ? "selected" : ""}>${d}</option>`).join("");
+    $("#day").dataset.loaded = s.date; fillForm(s.rows);
+    await runRows(s.rows, `test day ${s.date}`);
+  } catch (e) { say(`Could not reach the backend: ${e.message}. It may still be starting; reload in a moment.`); }
+  setInterval(loadLog, 15000);
+})();
+</script>
+</body>
+</html>

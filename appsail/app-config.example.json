@@ -1,0 +1,13 @@
+{
+  "command": "python3 -u app.py",
+  "build_path": ".",
+  "stack": "python_3_9",
+  "env_variables": {
+    "ALLOW_LOCAL_FALLBACK": "false",
+    "QUICKML_PAYLOAD_STYLE": "auto",
+    "ZOHO_ACCOUNTS_URL": "https://accounts.zoho.in",
+    "QUICKML_ENVIRONMENT": "Production",
+    "DATASTORE_TABLE": "ForecastRuns"
+  },
+  "memory": 512
+}
