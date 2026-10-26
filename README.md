@@ -131,7 +131,7 @@ Never commit values; `.env.example` lists them.
 | `ALLOW_LOCAL_FALLBACK` | both | Backend default `false`. predict.py default `true`: if QuickML is unreachable it uses an offline copy of the same linear model and prints a warning, so the evaluation never crashes. Set `false` if the rules require QuickML-only predictions |
 | `DATASTORE_TABLE` | AppSail | e.g. `ForecastRuns`; stores each run summary (columns in `core/storage.py`) |
 | `STRATUS_BUCKET` | AppSail | optional; archives uploaded CSVs |
-| `PREDICT_PROXY_URL` | predict.py | Overrides the constant in the file |
+| `PREDICT_PROXY_URL` | predict.py | Overrides the constant in the file | 
 
 ## Transition controller
 
